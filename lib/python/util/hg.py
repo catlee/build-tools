@@ -131,12 +131,14 @@ def has_rev(repo, rev):
         repo (str):     path to repository
         rev  (str):     revision identifier
     """
-    log.debug("checking to see if %s exists in %s", rev, repo)
+    log.info("checking to see if %s exists in %s", rev, repo)
     cmd = ['log', '-r', rev, '--template', '{node}']
     try:
-        get_hg_output(cmd, cwd=repo)
+        get_hg_output(cmd, cwd=repo, include_stderr=True)
+        log.info("%s exists in %s", rev, repo)
         return True
     except subprocess.CalledProcessError:
+        log.info("%s does not exist in %s", rev, repo)
         return False
 
 
