@@ -307,6 +307,48 @@ class TestHg(unittest.TestCase):
         self.assertRaises(subprocess.CalledProcessError, pull,
                           repo2, self.wc, update_dest=False)
 
+
+    def testPullRetryTransient(self):
+        # Make sure we retry on certain types of errors
+        num_calls = [0]
+
+        def _my_get_hg_output(cmd, **kwargs):
+            num_calls[0] += 1
+            if num_calls[0] == 1:
+                e = subprocess.CalledProcessError(returncode=255, cmd=cmd, output='HTTP Error 500')
+                raise e
+            else:
+                return True
+
+        with patch('util.hg.get_hg_output', new=_my_get_hg_output):
+            with patch('util.hg.RETRY_JITTER', new=0):
+                pull(self.repodir, self.wc, update_dest=False)
+                self.assertEquals(num_calls, [2])
+                self.assertEquals(self.sleep_patch.call_count, 1)
+                self.assertEquals(self.sleep_patch.call_args_list, [mock.call(hg.RETRY_SLEEPTIME)])
+
+    def testPullRetryTransientExtraWait(self):
+        # Make sure we retry longer on certain types of errors
+        num_calls = [0]
+
+        def _my_get_hg_output(cmd, **kwargs):
+            num_calls[0] += 1
+            if num_calls[0] == 1:
+                e = subprocess.CalledProcessError(returncode=255, cmd=cmd, output='HTTP Error 503')
+                raise e
+            else:
+                return True
+
+        with patch('util.hg.get_hg_output', new=_my_get_hg_output):
+            with patch('util.hg.RETRY_JITTER', new=0):
+                pull(self.repodir, self.wc, update_dest=False)
+                self.assertEquals(num_calls, [2])
+                self.assertEquals(self.sleep_patch.call_count, 2)
+                self.assertEquals(self.sleep_patch.call_args_list,
+                                  [mock.call(hg.RETRY_SLEEPTIME * hg.RETRY_EXTRA_WAIT_SCALE),
+                                   mock.call(hg.RETRY_SLEEPTIME),
+                                   ])
+
     def testShareUnrelated(self):
         # Create a new repo
         repo2 = os.path.join(self.tmpdir, 'repo2')
