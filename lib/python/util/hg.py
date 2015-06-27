@@ -186,7 +186,7 @@ def purge(dest):
     cmd.extend(['purge', '-a', '--all', dest])
 
     try:
-        with count_and_time('hgtool.purge'):
+        with count_and_time('hg.purge'):
             run_cmd(cmd, cwd=dest)
     except subprocess.CalledProcessError, e:
         log.debug('purge failed: %s' % e)
@@ -210,7 +210,7 @@ def update(dest, branch=None, revision=None):
         if branch and branch != local_branch:
             cmd.append(branch)
 
-    with count_and_time('hgtool.update'):
+    with count_and_time('hg.update'):
         run_cmd(cmd, cwd=dest)
     return get_revision(dest)
 
@@ -245,20 +245,20 @@ def clone(repo, dest, branch=None, revision=None, update_dest=True,
     Default timeout is 1800 seconds
     """
     if os.path.exists(dest):
-        statsd_client.incr('hgtool.clone.clobbered_dest')
+        statsd_client.incr('hg.clone.clobbered_dest')
         remove_path(dest)
 
     if bundles:
         log.info("Attempting to initialize clone with bundles")
         for bundle in bundles:
             if os.path.exists(dest):
-                statsd_client.incr('hgtool.clone.clobbered_dest')
+                statsd_client.incr('hg.clone.clobbered_dest')
                 remove_path(dest)
             init(dest)
             log.info("Trying to use bundle %s", bundle)
             try:
                 if not unbundle(bundle, dest):
-                    statsd_client.incr('hgtool.clone.clobbered_dest')
+                    statsd_client.incr('hg.clone.clobbered_dest')
                     remove_path(dest)
                     continue
                 adjust_paths(dest, default=repo)
@@ -266,7 +266,7 @@ def clone(repo, dest, branch=None, revision=None, update_dest=True,
                 return pull(repo, dest, update_dest=update_dest,
                             mirrors=mirrors, revision=revision, branch=branch)
             except Exception:
-                statsd_client.incr('hgtool.clone.clobbered_dest')
+                statsd_client.incr('hg.clone.clobbered_dest')
                 remove_path(dest)
                 log.exception("Problem unbundling/pulling from %s", bundle)
                 continue
@@ -312,7 +312,7 @@ def clone(repo, dest, branch=None, revision=None, update_dest=True,
     for _ in retrier(attempts=RETRY_ATTEMPTS, sleeptime=RETRY_SLEEPTIME,
                      sleepscale=RETRY_SLEEPSCALE, jitter=RETRY_JITTER):
         try:
-            with count_and_time('hgtool.clone'):
+            with count_and_time('hg.clone'):
                 get_hg_output(cmd=cmd, include_stderr=True, timeout=timeout)
             break
         except subprocess.CalledProcessError, e:
@@ -331,7 +331,7 @@ def clone(repo, dest, branch=None, revision=None, update_dest=True,
                 # Make sure the dest is clean
                 if os.path.exists(dest):
                     log.debug("deleting %s", dest)
-                    statsd_client.incr('hgtool.clone.clobbered_dest')
+                    statsd_client.incr('hg.clone.clobbered_dest')
                     remove_path(dest)
                 continue
             raise
@@ -399,7 +399,7 @@ def pull(repo, dest, update_dest=True, mirrors=None, **kwargs):
     for _ in retrier(attempts=RETRY_ATTEMPTS, sleeptime=RETRY_SLEEPTIME,
                      sleepscale=RETRY_SLEEPSCALE, jitter=RETRY_JITTER):
         try:
-            with count_and_time('hgtool.pull'):
+            with count_and_time('hg.pull'):
                 get_hg_output(cmd=cmd, cwd=dest, include_stderr=True)
             break
         except subprocess.CalledProcessError, e:
@@ -438,7 +438,7 @@ def out(src, remote, **kwargs):
     if os.path.exists(src):
         try:
             revs = []
-            with count_and_time('hgtool.out'):
+            with count_and_time('hg.out'):
                 lines = get_hg_output(cmd, cwd=src).rstrip().split("\n")
             for line in lines:
                 try:
@@ -466,7 +466,7 @@ def push(src, remote, push_new_branches=True, force=False, **kwargs):
     if push_new_branches:
         cmd.append('--new-branch')
     cmd.append(remote)
-    with count_and_time('hgtool.push'):
+    with count_and_time('hg.push'):
         run_cmd(cmd, cwd=src)
 
 
@@ -528,7 +528,7 @@ def mercurial(repo, dest, branch=None, revision=None, update_dest=True,
         if not hgpath or _make_absolute(hgpath) != _make_absolute(repo):
             log.info("hg path isn't correct (%s should be %s); clobbering",
                      hgpath, _make_absolute(repo))
-            statsd_client.incr('hgtool.mercurial.clobbered_dest')
+            statsd_client.incr('hg.mercurial.clobbered_dest')
             remove_path(dest)
 
     # If the working directory already exists and isn't using share we update
@@ -536,7 +536,7 @@ def mercurial(repo, dest, branch=None, revision=None, update_dest=True,
     # settings
     if os.path.exists(dest):
         if not os.path.exists(os.path.join(dest, ".hg")):
-            statsd_client.incr('hgtool.mercurial.clobbered_dest')
+            statsd_client.incr('hg.mercurial.clobbered_dest')
             log.warning("%s doesn't appear to be a valid hg directory; clobbering", dest)
             remove_path(dest)
         elif not os.path.exists(os.path.join(dest, ".hg", "sharedpath")):
@@ -572,9 +572,9 @@ def mercurial(repo, dest, branch=None, revision=None, update_dest=True,
                          hgpath, _make_absolute(repo))
                 # we need to clobber both the shared checkout and the dest,
                 # since hgrc needs to be in both places
-                statsd_client.incr('hgtool.mercurial.clobbered_share')
+                statsd_client.incr('hg.mercurial.clobbered_share')
                 remove_path(sharedRepo)
-                statsd_client.incr('hgtool.mercurial.clobbered_dest')
+                statsd_client.incr('hg.mercurial.clobbered_dest')
                 remove_path(dest)
 
         if os.path.exists(dest_sharedPath):
@@ -586,7 +586,7 @@ def mercurial(repo, dest, branch=None, revision=None, update_dest=True,
                 # Clobber!
                 log.info("We're currently shared from %s, but are being requested to pull from %s (%s); clobbering",
                          dest_sharedPath_data, repo, norm_sharedRepo)
-                statsd_client.incr('hgtool.mercurial.clobbered_dest')
+                statsd_client.incr('hg.mercurial.clobbered_dest')
                 remove_path(dest)
 
         try:
@@ -606,7 +606,7 @@ def mercurial(repo, dest, branch=None, revision=None, update_dest=True,
                 if not parent:
                     log.info("Shared repo %s no longer has our parent cset; clobbering",
                              sharedRepo)
-                    statsd_client.incr('hgtool.mercurial.clobbered_dest')
+                    statsd_client.incr('hg.mercurial.clobbered_dest')
                     remove_path(dest)
                 else:
                     if autoPurge:
@@ -636,7 +636,7 @@ def mercurial(repo, dest, branch=None, revision=None, update_dest=True,
             log.warning(
                 "Error updating %s from sharedRepo (%s): ", dest, sharedRepo)
             log.debug("Exception:", exc_info=True)
-            statsd_client.incr('hgtool.mercurial.clobbered_dest')
+            statsd_client.incr('hg.mercurial.clobbered_dest')
             remove_path(dest)
     # end if shareBase
 
