@@ -23,7 +23,7 @@ TRANSIENT_HG_ERRORS = (
 
 # Error strings that we want to retry on, but with a longer sleep
 TRANSIENT_HG_ERRORS_EXTRA_WAIT = (
-    'HTTP Error 503'  # XXX TEST ME THIS IS BORKEN
+    'HTTP Error 503',
 )
 
 # Error strings for things that will never complete
