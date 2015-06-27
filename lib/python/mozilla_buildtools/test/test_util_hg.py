@@ -12,6 +12,7 @@ from util.hg import clone, pull, update, hg_ver, mercurial, _make_absolute, \
 from util.file import touch
 from util.commands import run_cmd, get_output
 
+import mock
 from mock import patch
 
 
@@ -114,7 +115,7 @@ class TestHg(unittest.TestCase):
         self.wc = os.path.join(self.tmpdir, 'wc')
         self.pwd = os.getcwd()
         self.sleep_patcher = patch('time.sleep')
-        self.sleep_patcher.start()
+        self.sleep_patch = self.sleep_patcher.start()
         # Have a stable hgrc to test with
         os.environ['HGRCPATH'] = os.path.join(os.path.dirname(__file__), "hgrc")
         hg.RETRY_ATTEMPTS = 2
@@ -173,6 +174,48 @@ class TestHg(unittest.TestCase):
         # We'll only get a subset of the revisions
         self.assertEquals(self.revisions[:1] + self.revisions[2:],
                           getRevisions(self.wc))
+
+    def testCloneRetryTransient(self):
+        # Make sure we retry on certain types of errors
+        num_calls = [0]
+
+        def _my_get_hg_output(cmd, **kwargs):
+            num_calls[0] += 1
+            if num_calls[0] == 1:
+                e = subprocess.CalledProcessError(returncode=255, cmd=cmd, output='HTTP Error 500')
+                raise e
+            else:
+                return True
+
+        with patch('util.hg.get_hg_output', new=_my_get_hg_output):
+            with patch('util.hg.RETRY_JITTER', new=0):
+                clone(self.repodir, self.wc, update_dest=False)
+                self.assertEquals(num_calls, [2])
+                self.assertEquals(self.sleep_patch.call_count, 1)
+                self.assertEquals(self.sleep_patch.call_args_list, [mock.call(hg.RETRY_SLEEPTIME)])
+
+    def testCloneRetryTransientExtraWait(self):
+        # Make sure we retry longer on certain types of errors
+        num_calls = [0]
+
+        def _my_get_hg_output(cmd, **kwargs):
+            num_calls[0] += 1
+            if num_calls[0] == 1:
+                e = subprocess.CalledProcessError(returncode=255, cmd=cmd, output='HTTP Error 503')
+                raise e
+            else:
+                return True
+
+        with patch('util.hg.get_hg_output', new=_my_get_hg_output):
+            with patch('util.hg.RETRY_JITTER', new=0):
+                clone(self.repodir, self.wc, update_dest=False)
+                self.assertEquals(num_calls, [2])
+                self.assertEquals(self.sleep_patch.call_count, 2)
+                self.assertEquals(self.sleep_patch.call_args_list,
+                                  [mock.call(hg.RETRY_SLEEPTIME * hg.RETRY_EXTRA_WAIT_SCALE),
+                                   mock.call(hg.RETRY_SLEEPTIME),
+                                   ])
+
 
     def testUpdateRevision(self):
         rev = clone(self.repodir, self.wc, update_dest=False)
