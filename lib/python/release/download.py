@@ -52,6 +52,9 @@ def downloadReleaseBuilds(stageServer, productName, brandName, version,
                 except (requests.HTTPError, requests.ConnectionError,
                         requests.Timeout):
                     log.exception("Caught exception downloading")
+        else:
+            raise IOError("Failed to download %s" % url)
+
 
         if fileName.endswith('exe'):
             if usePymake:
