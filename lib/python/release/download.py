@@ -37,9 +37,17 @@ def downloadReleaseBuilds(stageServer, productName, brandName, version,
                 try:
                     r = requests.get(url, stream=True, timeout=15)
                     r.raise_for_status()
+                    log.info("Response headers: %s", r.headers)
+                    to_download = int(r.headers['content-length'])
+                    downloaded = 0
                     for chunk in r.iter_content(chunk_size=5*1024**2):
                         f.write(chunk)
+                        downloaded += len(chunk)
                     r.close()
+                    if to_download != downloaded:
+                        log.warning("Incomplete download (got %i bytes; expected %i)",
+                                    downloaded, to_download)
+                        continue
                     break
                 except (requests.HTTPError, requests.ConnectionError,
                         requests.Timeout):
